@@ -13,14 +13,10 @@ def fetch_expirations(symbol):
     headers = {"Authorization": f"Bearer {API_TOKEN}", "Accept": "application/json"}
     params = {"symbol": symbol}
     response = requests.get(url, headers=headers, params=params)
-    
+
     if response.status_code == 200:
         expirations = response.json().get("expirations", {}).get("date", [])
-        if isinstance(expirations, list) and expirations:
-            return expirations
-        else:
-            st.error("No valid expiration dates found in the API response.")
-            return []
+        return expirations if isinstance(expirations, list) and expirations else []
     else:
         st.error(f"Error fetching expiration dates: {response.text}")
         return []
@@ -29,12 +25,27 @@ def fetch_expirations(symbol):
 def fetch_options_data(symbol, expiration):
     url = f"{BASE_URL}/options/chains"
     headers = {"Authorization": f"Bearer {API_TOKEN}", "Accept": "application/json"}
-    params = {"symbol": symbol, "expiration": expiration}
+    params = {
+        "symbol": symbol,
+        "expiration": expiration,
+        "greeks": "true"  # Request Greeks and implied volatility
+    }
     response = requests.get(url, headers=headers, params=params)
-    
+
     if response.status_code == 200:
         options = response.json().get("options", {}).get("option", [])
-        return pd.DataFrame(options)
+        df = pd.DataFrame(options)
+
+        # Ensure necessary columns are present
+        if not df.empty:
+            if "implied_volatility" not in df.columns:
+                df["implied_volatility"] = None  # Add placeholder if missing
+            if "strike" not in df.columns:
+                df["strike"] = None
+            if "expiration_date" not in df.columns:
+                df["expiration_date"] = expiration  # Use expiration as fallback
+
+        return df
     else:
         st.error(f"Error fetching options data: {response.text}")
         return pd.DataFrame()
@@ -66,6 +77,12 @@ def plot_iv_surface(options_data):
 
 # --- Interpret IV Surface ---
 def interpret_iv_surface(options_data):
+    required_columns = {"strike", "implied_volatility", "expiration_date"}
+    if not required_columns.issubset(options_data.columns):
+        missing_columns = required_columns - set(options_data.columns)
+        st.error(f"The following required columns are missing from the data: {', '.join(missing_columns)}")
+        return
+
     if options_data.empty:
         st.write("No options data to interpret.")
         return
