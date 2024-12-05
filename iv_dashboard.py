@@ -75,7 +75,6 @@ def plot_iv_surface(options_data):
     else:
         st.error("Required columns for IV visualization are missing.")
 
-# --- Interpret IV Surface ---
 def interpret_iv_surface(options_data):
     required_columns = {"strike", "implied_volatility", "expiration_date"}
     if not required_columns.issubset(options_data.columns):
@@ -90,8 +89,13 @@ def interpret_iv_surface(options_data):
     avg_iv_by_strike = options_data.groupby("strike")["implied_volatility"].mean()
     avg_iv_by_ttm = options_data.groupby("expiration_date")["implied_volatility"].mean()
 
+    # Check if the series are empty or all NaN before calling idxmax()/idxmin()
+    if avg_iv_by_ttm.empty or avg_iv_by_ttm.isna().all():
+        ttm_trend = "No data available to determine trends."
+    else:
+        ttm_trend = "higher for near-term expirations" if avg_iv_by_ttm.idxmax() < avg_iv_by_ttm.idxmin() else "higher for long-term expirations"
+
     skew_direction = "upward" if avg_iv_by_strike.diff().mean() > 0 else "downward"
-    ttm_trend = "higher for near-term expirations" if avg_iv_by_ttm.idxmax() < avg_iv_by_ttm.idxmin() else "higher for long-term expirations"
 
     st.write(f"""
     **Dynamic Insights for Implied Volatility Surface:**
