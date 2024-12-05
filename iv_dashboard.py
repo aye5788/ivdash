@@ -17,11 +17,12 @@ def fetch_expirations(symbol):
         # Debugging: Log the raw API response
         st.write("Raw Expiration Dates Response:", response.json())
         
-        expirations = response.json().get("expirations", [])
+        # Extract the "date" list from the response
+        expirations = response.json().get("expirations", {}).get("date", [])
         if isinstance(expirations, list) and expirations:  # Ensure it’s a list and not empty
             return expirations
         else:
-            st.error("No expiration dates found in the API response.")
+            st.error("No valid expiration dates found in the API response.")
             return []
     else:
         st.error(f"Error fetching expiration dates: {response.text}")
