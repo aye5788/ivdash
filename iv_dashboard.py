@@ -1,7 +1,7 @@
 import streamlit as st
 import pandas as pd
-import plotly.graph_objects as go
 import requests
+import plotly.graph_objects as go
 
 # Tradier API credentials
 API_TOKEN = "7uMZjb2elQAxxOdOGhrgDkqPEqSy"  # Replace with your Tradier API token
@@ -41,24 +41,28 @@ def fetch_options_data(symbol, expiration):
 
 # --- Plot IV Surface ---
 def plot_iv_surface(options_data):
-    if "implied_volatility" not in options_data or options_data["implied_volatility"].isnull().all():
-        st.error("No implied volatility data available for plotting.")
-        return
-
-    fig = go.Figure(data=[go.Surface(
-        z=options_data["implied_volatility"].values.reshape(-1, 1),
-        x=options_data["strike"].values,
-        y=options_data["expiration_type"].values
-    )])
-    fig.update_layout(
-        title="Implied Volatility Surface",
-        scene=dict(
-            xaxis_title="Strike Price",
-            yaxis_title="Time to Maturity (Days)",
-            zaxis_title="Implied Volatility (%)"
+    if "strike" in options_data.columns and "implied_volatility" in options_data.columns:
+        options_data = options_data.dropna(subset=["strike", "implied_volatility"])
+        fig = go.Figure(data=[
+            go.Scatter3d(
+                x=options_data["strike"],
+                y=options_data["expiration_date"],
+                z=options_data["implied_volatility"],
+                mode="markers",
+                marker=dict(size=5, color=options_data["implied_volatility"], colorscale="Viridis"),
+            )
+        ])
+        fig.update_layout(
+            title="Implied Volatility Surface",
+            scene=dict(
+                xaxis_title="Strike Price",
+                yaxis_title="Expiration Date",
+                zaxis_title="Implied Volatility",
+            )
         )
-    )
-    st.plotly_chart(fig)
+        st.plotly_chart(fig)
+    else:
+        st.error("Required columns for IV visualization are missing.")
 
 # --- Interpret IV Surface ---
 def interpret_iv_surface(options_data):
