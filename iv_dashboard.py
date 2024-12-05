@@ -55,11 +55,6 @@ if ticker:
                 st.write("Options Data Preview:")
                 st.dataframe(options_data.head(10))
             else:
-                st.write("No data available for the entered ticker.")
+                st.write("No data available for the entered ticker and expiration.")
     else:
         st.write("No expiration dates available for the entered ticker.")
-
-        st.write("Options Data Preview:")
-        st.dataframe(options_data.head(10))
-    else:
-        st.write("No data available for the entered ticker.")
