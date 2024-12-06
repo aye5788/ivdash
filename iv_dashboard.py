@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import plotly.express as px
 
 # Tradier API credentials
-API_TOKEN = "your_tradier_api_token"  # Replace with your Tradier API token
+API_TOKEN = "7uMZjb2elQAxxOdOGhrgDkqPEqSy"  # Replace with your Tradier API token
 BASE_URL = "https://api.tradier.com/v1/markets"
 
 # --- Function to fetch expiration dates ---
