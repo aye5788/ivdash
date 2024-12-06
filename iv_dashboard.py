@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import requests
 import plotly.graph_objects as go
+import plotly.express as px
 
 # Tradier API credentials
 API_TOKEN = "7uMZjb2elQAxxOdOGhrgDkqPEqSy"  # Replace with your Tradier API token
@@ -36,26 +37,20 @@ def fetch_options_data(symbol, expiration):
         options = response.json().get("options", {}).get("option", [])
         df = pd.DataFrame(options)
 
-        # Extract implied volatility from the greeks
-        if not df.empty:
-            df["implied_volatility"] = df["greeks"].apply(
-                lambda x: x.get("mid_iv") if x and "mid_iv" in x else (
-                    x.get("ask_iv") if x and "ask_iv" in x else (
-                        x.get("bid_iv") if x and "bid_iv" in x else None
-                    )
-                )
-            )
-            df["strike"] = df["strike"]
-            df["expiration_date"] = expiration
+        # Ensure necessary columns are present
+        if not df.empty and "greeks" in df.columns:
+            df["implied_volatility"] = df["greeks"].apply(lambda x: x.get("mid_iv", None) if isinstance(x, dict) else None)
+        else:
+            df["implied_volatility"] = None
 
         return df
     else:
         st.error(f"Error fetching options data: {response.text}")
         return pd.DataFrame()
 
-# --- Plot IV Surface ---
+# --- Plot Volatility Surface ---
 def plot_iv_surface(options_data):
-    if "strike" in options_data.columns and "implied_volatility" in options_data.columns:
+    if "strike" in options_data.columns and "implied_volatility" in options_data.columns and "expiration_date" in options_data.columns:
         options_data = options_data.dropna(subset=["strike", "implied_volatility"])
         fig = go.Figure(data=[
             go.Scatter3d(
@@ -78,57 +73,39 @@ def plot_iv_surface(options_data):
     else:
         st.error("Required columns for IV visualization are missing.")
 
-# --- Plot Volatility Smile ---
-def plot_volatility_smile(options_data):
-    if "strike" in options_data.columns and "implied_volatility" in options_data.columns:
-        smile_data = options_data.groupby("strike")["implied_volatility"].mean().dropna()
-        fig = go.Figure(data=go.Scatter(
-            x=smile_data.index,
-            y=smile_data.values,
-            mode="lines+markers",
-            marker=dict(size=8),
-        ))
-        fig.update_layout(
-            title="Volatility Smile",
-            xaxis_title="Strike Price",
-            yaxis_title="Implied Volatility",
-        )
-        st.plotly_chart(fig)
-    else:
-        st.error("Required columns for volatility smile visualization are missing.")
-
-# --- Interpret IV Surface ---
-def interpret_iv_surface(options_data):
-    required_columns = {"strike", "implied_volatility", "expiration_date"}
-    if not required_columns.issubset(options_data.columns):
-        missing_columns = required_columns - set(options_data.columns)
-        st.error(f"The following required columns are missing from the data: {', '.join(missing_columns)}")
+# --- Interpret Volatility Smile ---
+def interpret_volatility_smile(options_data):
+    if options_data.empty or "strike" not in options_data.columns or "implied_volatility" not in options_data.columns:
+        st.error("Insufficient data for Volatility Smile interpretation.")
         return
 
-    if options_data.empty:
-        st.write("No options data to interpret.")
-        return
-
-    avg_iv_by_strike = options_data.groupby("strike")["implied_volatility"].mean()
-    avg_iv_by_ttm = options_data.groupby("expiration_date")["implied_volatility"].mean()
-
-    if avg_iv_by_ttm.empty or avg_iv_by_ttm.isna().all():
-        ttm_trend = "No data available to determine trends."
-    else:
-        ttm_trend = "higher for near-term expirations" if avg_iv_by_ttm.idxmax() < avg_iv_by_ttm.idxmin() else "higher for long-term expirations"
-
+    avg_iv_by_strike = options_data.groupby("strike")["implied_volatility"].mean().dropna()
     skew_direction = "upward" if avg_iv_by_strike.diff().mean() > 0 else "downward"
 
     st.write(f"""
-    **Dynamic Insights for Implied Volatility Surface:**
-    - The IV skew is trending **{skew_direction}**, indicating how risk changes with strike prices.
-    - Implied volatility is **{ttm_trend}**, suggesting how market uncertainty evolves with time.
-    - Look for sharp IV spikes to identify unusual pricing opportunities.
+    **Dynamic Insights for Volatility Smile:**
+    - The Volatility Smile is trending **{skew_direction}**, indicating risk variation across strike prices.
+    - Higher volatility at extreme strikes often signals uncertainty in pricing deep in-the-money or out-of-the-money options.
     """)
 
+# --- Plot Volatility Smile ---
+def plot_volatility_smile(options_data):
+    if "strike" in options_data.columns and "implied_volatility" in options_data.columns:
+        fig = px.scatter(
+            options_data,
+            x="strike",
+            y="implied_volatility",
+            title="Volatility Smile",
+            labels={"strike": "Strike Price", "implied_volatility": "Implied Volatility"},
+        )
+        fig.update_traces(mode="lines+markers")
+        st.plotly_chart(fig)
+    else:
+        st.error("Required columns for Volatility Smile visualization are missing.")
+
 # --- Streamlit App ---
-st.title("Implied Volatility Surface Dashboard")
-st.write("This app visualizes implied volatility surfaces for selected tickers.")
+st.title("Implied Volatility Surface and Smile Dashboard")
+st.write("This app visualizes implied volatility surfaces and smiles for selected tickers.")
 
 # --- Ticker Input ---
 ticker = st.text_input("Enter a Ticker Symbol:", "AAPL")
@@ -161,6 +138,7 @@ if ticker:
 
                 elif analysis_choice == "Volatility Smile":
                     plot_volatility_smile(options_data)
+                    interpret_volatility_smile(options_data)
             else:
                 st.write("No data available for the entered ticker and expiration.")
     else:
