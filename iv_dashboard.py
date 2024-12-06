@@ -6,7 +6,7 @@ import json
 import plotly.graph_objects as go
 
 # API Configuration
-API_BASE_URL = "https://sandbox.tradier.com/v1/markets/options/chains"
+API_BASE_URL = "https://sandbox.tradier.com/v1/markets/options"
 API_KEY = "7uMZjb2elQAxxOdOGhrgDkqPEqSy"  # Replace with your actual API key
 
 # Title and Sidebar
@@ -17,7 +17,23 @@ analysis_type = st.sidebar.radio(
     options=["Implied Volatility Surface", "Volatility Smile"]
 )
 
-# Function to fetch data from the API
+# Function to fetch expiration dates from the API
+@st.cache
+def fetch_expiration_dates(symbol):
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {API_KEY}",
+    }
+    response = requests.get(f"{API_BASE_URL}/expirations", headers=headers, params={"symbol": symbol})
+    
+    if response.status_code == 200:
+        data = response.json()
+        return data.get("expirations", [])
+    else:
+        st.error(f"Failed to fetch expiration dates: {response.status_code} - {response.text}")
+        return []
+
+# Function to fetch options data from the API
 @st.cache
 def fetch_options_data(symbol, expiration):
     headers = {
@@ -25,7 +41,7 @@ def fetch_options_data(symbol, expiration):
         "Authorization": f"Bearer {API_KEY}",
     }
     params = {"symbol": symbol, "expiration": expiration, "greeks": "true"}
-    response = requests.get(API_BASE_URL, headers=headers, params=params)
+    response = requests.get(f"{API_BASE_URL}/chains", headers=headers, params=params)
 
     if response.status_code == 200:
         data = response.json()
@@ -118,19 +134,24 @@ def plot_iv_surface(data):
 # Main Execution
 st.sidebar.subheader("Input Parameters")
 symbol = st.sidebar.text_input("Enter a Ticker Symbol:", value="AAPL")
-expiration = st.sidebar.text_input("Enter an Expiration Date (YYYY-MM-DD):", value="2024-12-06")
 
-if st.sidebar.button("Fetch Data"):
-    options_data = fetch_options_data(symbol, expiration)
-    if not options_data.empty:
-        options_data = process_data(options_data)
+if symbol:
+    expirations = fetch_expiration_dates(symbol)
+    if expirations:
+        expiration = st.sidebar.selectbox("Select Expiration Date:", options=expirations)
+        if st.sidebar.button("Fetch Data"):
+            options_data = fetch_options_data(symbol, expiration)
+            if not options_data.empty:
+                options_data = process_data(options_data)
 
-        st.subheader("Options Data Preview:")
-        st.write(options_data)
+                st.subheader("Options Data Preview:")
+                st.write(options_data)
 
-        if analysis_type == "Volatility Smile":
-            plot_volatility_smile(options_data)
-        elif analysis_type == "Implied Volatility Surface":
-            plot_iv_surface(options_data)
+                if analysis_type == "Volatility Smile":
+                    plot_volatility_smile(options_data)
+                elif analysis_type == "Implied Volatility Surface":
+                    plot_iv_surface(options_data)
+            else:
+                st.warning("No data available for the selected ticker and expiration date.")
     else:
-        st.warning("No data available for the selected ticker and expiration date.")
+        st.warning("No available expirations for the given symbol.")
