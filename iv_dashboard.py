@@ -36,14 +36,17 @@ def fetch_options_data(symbol, expiration):
         options = response.json().get("options", {}).get("option", [])
         df = pd.DataFrame(options)
 
-        # Ensure necessary columns are present
+        # Extract implied volatility from the greeks
         if not df.empty:
-            if "implied_volatility" not in df.columns:
-                df["implied_volatility"] = None  # Add placeholder if missing
-            if "strike" not in df.columns:
-                df["strike"] = None
-            if "expiration_date" not in df.columns:
-                df["expiration_date"] = expiration  # Use expiration as fallback
+            df["implied_volatility"] = df["greeks"].apply(
+                lambda x: x.get("mid_iv") if x and "mid_iv" in x else (
+                    x.get("ask_iv") if x and "ask_iv" in x else (
+                        x.get("bid_iv") if x and "bid_iv" in x else None
+                    )
+                )
+            )
+            df["strike"] = df["strike"]
+            df["expiration_date"] = expiration
 
         return df
     else:
@@ -55,11 +58,12 @@ def plot_iv_surface(options_data):
     if "strike" in options_data.columns and "implied_volatility" in options_data.columns:
         options_data = options_data.dropna(subset=["strike", "implied_volatility"])
         fig = go.Figure(data=[
-            go.Surface(
-                z=options_data["implied_volatility"].values.reshape(-1, 1),
+            go.Scatter3d(
                 x=options_data["strike"],
                 y=options_data["expiration_date"],
-                colorscale="Viridis"
+                z=options_data["implied_volatility"],
+                mode="markers",
+                marker=dict(size=5, color=options_data["implied_volatility"], colorscale="Viridis"),
             )
         ])
         fig.update_layout(
@@ -77,16 +81,13 @@ def plot_iv_surface(options_data):
 # --- Plot Volatility Smile ---
 def plot_volatility_smile(options_data):
     if "strike" in options_data.columns and "implied_volatility" in options_data.columns:
-        options_data = options_data.dropna(subset=["strike", "implied_volatility"])
-        fig = go.Figure(data=[
-            go.Scatter(
-                x=options_data["strike"],
-                y=options_data["implied_volatility"],
-                mode="lines+markers",
-                marker=dict(size=8),
-                line=dict(width=2),
-            )
-        ])
+        smile_data = options_data.groupby("strike")["implied_volatility"].mean().dropna()
+        fig = go.Figure(data=go.Scatter(
+            x=smile_data.index,
+            y=smile_data.values,
+            mode="lines+markers",
+            marker=dict(size=8),
+        ))
         fig.update_layout(
             title="Volatility Smile",
             xaxis_title="Strike Price",
@@ -94,7 +95,36 @@ def plot_volatility_smile(options_data):
         )
         st.plotly_chart(fig)
     else:
-        st.error("Required columns for Volatility Smile analysis are missing.")
+        st.error("Required columns for volatility smile visualization are missing.")
+
+# --- Interpret IV Surface ---
+def interpret_iv_surface(options_data):
+    required_columns = {"strike", "implied_volatility", "expiration_date"}
+    if not required_columns.issubset(options_data.columns):
+        missing_columns = required_columns - set(options_data.columns)
+        st.error(f"The following required columns are missing from the data: {', '.join(missing_columns)}")
+        return
+
+    if options_data.empty:
+        st.write("No options data to interpret.")
+        return
+
+    avg_iv_by_strike = options_data.groupby("strike")["implied_volatility"].mean()
+    avg_iv_by_ttm = options_data.groupby("expiration_date")["implied_volatility"].mean()
+
+    if avg_iv_by_ttm.empty or avg_iv_by_ttm.isna().all():
+        ttm_trend = "No data available to determine trends."
+    else:
+        ttm_trend = "higher for near-term expirations" if avg_iv_by_ttm.idxmax() < avg_iv_by_ttm.idxmin() else "higher for long-term expirations"
+
+    skew_direction = "upward" if avg_iv_by_strike.diff().mean() > 0 else "downward"
+
+    st.write(f"""
+    **Dynamic Insights for Implied Volatility Surface:**
+    - The IV skew is trending **{skew_direction}**, indicating how risk changes with strike prices.
+    - Implied volatility is **{ttm_trend}**, suggesting how market uncertainty evolves with time.
+    - Look for sharp IV spikes to identify unusual pricing opportunities.
+    """)
 
 # --- Streamlit App ---
 st.title("Implied Volatility Surface Dashboard")
@@ -127,6 +157,7 @@ if ticker:
                 # Perform the selected analysis
                 if analysis_choice == "Implied Volatility Surface":
                     plot_iv_surface(options_data)
+                    interpret_iv_surface(options_data)
 
                 elif analysis_choice == "Volatility Smile":
                     plot_volatility_smile(options_data)
