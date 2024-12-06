@@ -5,9 +5,9 @@ import requests
 import json
 import plotly.graph_objects as go
 
-# API Configuration
-API_BASE_URL = "https://sandbox.tradier.com/v1/markets/options"
-API_KEY = "7uMZjb2elQAxxOdOGhrgDkqPEqSy"  # Replace with your actual API key
+# Tradier API credentials
+API_TOKEN = "7uMZjb2elQAxxOdOGhrgDkqPEqSy"  # Replace with your Tradier API token
+BASE_URL = "https://api.tradier.com/v1/markets"
 
 # Title and Sidebar
 st.title("Options Analytics Dashboard")
@@ -25,7 +25,6 @@ def fetch_expiration_dates(symbol):
         "Authorization": f"Bearer {API_KEY}",
     }
     response = requests.get(f"{API_BASE_URL}/expirations", headers=headers, params={"symbol": symbol})
-    
     if response.status_code == 200:
         data = response.json()
         return data.get("expirations", [])
@@ -42,7 +41,6 @@ def fetch_options_data(symbol, expiration):
     }
     params = {"symbol": symbol, "expiration": expiration, "greeks": "true"}
     response = requests.get(f"{API_BASE_URL}/chains", headers=headers, params=params)
-
     if response.status_code == 200:
         data = response.json()
         options = data.get("options", {}).get("option", [])
