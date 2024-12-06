@@ -1,122 +1,167 @@
 import streamlit as st
 import pandas as pd
 import requests
-import json
-import plotly.express as px
 import plotly.graph_objects as go
 
-# Set your API key here
-API_KEY = "7uMZjb2elQAxxOdOGhrgDkqPEqSy"
+# Tradier API credentials
+API_TOKEN = "7uMZjb2elQAxxOdOGhrgDkqPEqSy"  # Replace with your Tradier API token
+BASE_URL = "https://api.tradier.com/v1/markets"
 
-# Function to fetch expiration dates
-def fetch_expiration_dates(symbol):
-    try:
-        url = f"https://api.tradier.com/v1/markets/options/expirations"
-        headers = {"Authorization": f"Bearer {API_KEY}", "Accept": "application/json"}
-        params = {"symbol": symbol}
-        response = requests.get(url, headers=headers, params=params)
-        response.raise_for_status()
-        data = response.json()
-        return data.get("expirations", [])
-    except Exception as e:
-        st.error(f"Failed to fetch expiration dates: {e}")
+# --- Function to fetch expiration dates ---
+def fetch_expirations(symbol):
+    url = f"{BASE_URL}/options/expirations"
+    headers = {"Authorization": f"Bearer {API_TOKEN}", "Accept": "application/json"}
+    params = {"symbol": symbol}
+    response = requests.get(url, headers=headers, params=params)
+
+    if response.status_code == 200:
+        expirations = response.json().get("expirations", {}).get("date", [])
+        return expirations if isinstance(expirations, list) and expirations else []
+    else:
+        st.error(f"Error fetching expiration dates: {response.text}")
         return []
 
-# Function to fetch options data for a specific expiration
+# --- Function to fetch options data ---
 def fetch_options_data(symbol, expiration):
-    try:
-        url = f"https://api.tradier.com/v1/markets/options/chains"
-        headers = {"Authorization": f"Bearer {API_KEY}", "Accept": "application/json"}
-        params = {"symbol": symbol, "expiration": expiration}
-        response = requests.get(url, headers=headers, params=params)
-        response.raise_for_status()
-        data = response.json()
-        return pd.DataFrame(data.get("options", {}).get("option", []))
-    except Exception as e:
-        st.error(f"Failed to fetch options data: {e}")
+    url = f"{BASE_URL}/options/chains"
+    headers = {"Authorization": f"Bearer {API_TOKEN}", "Accept": "application/json"}
+    params = {
+        "symbol": symbol,
+        "expiration": expiration,
+        "greeks": "true"  # Request Greeks and implied volatility
+    }
+    response = requests.get(url, headers=headers, params=params)
+
+    if response.status_code == 200:
+        options = response.json().get("options", {}).get("option", [])
+        df = pd.DataFrame(options)
+
+        # Extract implied volatility from the greeks
+        if not df.empty:
+            df["implied_volatility"] = df["greeks"].apply(
+                lambda x: x.get("mid_iv") if x and "mid_iv" in x else (
+                    x.get("ask_iv") if x and "ask_iv" in x else (
+                        x.get("bid_iv") if x and "bid_iv" in x else None
+                    )
+                )
+            )
+            df["strike"] = df["strike"]
+            df["expiration_date"] = expiration
+
+        return df
+    else:
+        st.error(f"Error fetching options data: {response.text}")
         return pd.DataFrame()
 
-# Function to generate the implied volatility surface plot
+# --- Plot IV Surface ---
 def plot_iv_surface(options_data):
-    try:
-        options_data = options_data[options_data["implied_volatility"] > 0]
-        if options_data.empty:
-            st.warning("No valid data available to plot the implied volatility surface.")
-            return
-
-        fig = go.Figure(
-            data=[
-                go.Surface(
-                    z=options_data["implied_volatility"],
-                    x=options_data["strike"],
-                    y=options_data["expiration_date"],
-                    colorscale="Viridis",
-                )
-            ]
-        )
+    if "strike" in options_data.columns and "implied_volatility" in options_data.columns:
+        options_data = options_data.dropna(subset=["strike", "implied_volatility"])
+        fig = go.Figure(data=[
+            go.Scatter3d(
+                x=options_data["strike"],
+                y=options_data["expiration_date"],
+                z=options_data["implied_volatility"],
+                mode="markers",
+                marker=dict(size=5, color=options_data["implied_volatility"], colorscale="Viridis"),
+            )
+        ])
         fig.update_layout(
+            title="Implied Volatility Surface",
             scene=dict(
                 xaxis_title="Strike Price",
                 yaxis_title="Expiration Date",
                 zaxis_title="Implied Volatility",
-            ),
-            title="Implied Volatility Surface",
+            )
         )
         st.plotly_chart(fig)
-    except Exception as e:
-        st.error(f"Failed to generate IV surface plot: {e}")
-
-# Function to generate the volatility smile plot
-def plot_volatility_smile(options_data):
-    try:
-        smile_data = options_data[["strike", "implied_volatility"]].dropna()
-        smile_data = smile_data[smile_data["implied_volatility"] > 0]
-        if smile_data.empty:
-            st.warning("No valid data available to plot the volatility smile.")
-            return
-
-        fig = px.line(smile_data, x="strike", y="implied_volatility", title="Volatility Smile")
-        fig.update_layout(xaxis_title="Strike Price", yaxis_title="Implied Volatility")
-        st.plotly_chart(fig)
-    except Exception as e:
-        st.error(f"Failed to generate volatility smile plot: {e}")
-
-# Sidebar input for analysis type
-st.sidebar.title("Select Analysis")
-analysis_type = st.sidebar.radio(
-    "Choose an analysis type:", ["Implied Volatility Surface", "Volatility Smile"]
-)
-
-# Main dashboard
-st.title("Options Analytics Dashboard")
-st.subheader("Input Parameters")
-
-# Input for ticker symbol
-ticker = st.text_input("Enter a Ticker Symbol:", value="AAPL").upper()
-
-# Fetch and display expiration dates
-if ticker:
-    expirations = fetch_expiration_dates(ticker)
-    if expirations:
-        expiration = st.selectbox("Select an Expiration Date:", options=expirations)
     else:
-        expiration = None
-        st.warning("No available expirations for the given symbol.")
+        st.error("Required columns for IV visualization are missing.")
 
-# Fetch and display options data
-if ticker and expiration:
-    if st.button("Fetch Data"):
-        options_data = fetch_options_data(ticker, expiration)
-        if not options_data.empty:
-            st.subheader("Options Data Preview:")
-            st.dataframe(options_data)
+# --- Plot Volatility Smile ---
+def plot_volatility_smile(options_data):
+    if "strike" in options_data.columns and "implied_volatility" in options_data.columns:
+        smile_data = options_data.groupby("strike")["implied_volatility"].mean().dropna()
+        fig = go.Figure(data=go.Scatter(
+            x=smile_data.index,
+            y=smile_data.values,
+            mode="lines+markers",
+            marker=dict(size=8),
+        ))
+        fig.update_layout(
+            title="Volatility Smile",
+            xaxis_title="Strike Price",
+            yaxis_title="Implied Volatility",
+        )
+        st.plotly_chart(fig)
+    else:
+        st.error("Required columns for volatility smile visualization are missing.")
 
-            # Analysis type: Implied Volatility Surface
-            if analysis_type == "Implied Volatility Surface":
-                plot_iv_surface(options_data)
+# --- Interpret IV Surface ---
+def interpret_iv_surface(options_data):
+    required_columns = {"strike", "implied_volatility", "expiration_date"}
+    if not required_columns.issubset(options_data.columns):
+        missing_columns = required_columns - set(options_data.columns)
+        st.error(f"The following required columns are missing from the data: {', '.join(missing_columns)}")
+        return
 
-            # Analysis type: Volatility Smile
-            elif analysis_type == "Volatility Smile":
-                plot_volatility_smile(options_data)
-        else:
-            st.warning("No data available for the selected expiration.")
+    if options_data.empty:
+        st.write("No options data to interpret.")
+        return
+
+    avg_iv_by_strike = options_data.groupby("strike")["implied_volatility"].mean()
+    avg_iv_by_ttm = options_data.groupby("expiration_date")["implied_volatility"].mean()
+
+    if avg_iv_by_ttm.empty or avg_iv_by_ttm.isna().all():
+        ttm_trend = "No data available to determine trends."
+    else:
+        ttm_trend = "higher for near-term expirations" if avg_iv_by_ttm.idxmax() < avg_iv_by_ttm.idxmin() else "higher for long-term expirations"
+
+    skew_direction = "upward" if avg_iv_by_strike.diff().mean() > 0 else "downward"
+
+    st.write(f"""
+    **Dynamic Insights for Implied Volatility Surface:**
+    - The IV skew is trending **{skew_direction}**, indicating how risk changes with strike prices.
+    - Implied volatility is **{ttm_trend}**, suggesting how market uncertainty evolves with time.
+    - Look for sharp IV spikes to identify unusual pricing opportunities.
+    """)
+
+# --- Streamlit App ---
+st.title("Implied Volatility Surface Dashboard")
+st.write("This app visualizes implied volatility surfaces for selected tickers.")
+
+# --- Ticker Input ---
+ticker = st.text_input("Enter a Ticker Symbol:", "AAPL")
+if ticker:
+    st.write(f"Fetching options data for: {ticker}")
+    
+    # Fetch expirations
+    expirations = fetch_expirations(ticker)
+    if expirations:
+        selected_expiration = st.selectbox("Select Expiration Date:", expirations)
+        
+        # Fetch options data for the selected expiration
+        if selected_expiration:
+            options_data = fetch_options_data(ticker, selected_expiration)
+            if not options_data.empty:
+                st.write("Options Data Preview:")
+                st.dataframe(options_data.head(10))
+
+                # Menu for analysis options
+                st.sidebar.title("Select Analysis")
+                analysis_choice = st.sidebar.radio(
+                    "Choose an analysis type:",
+                    ("Implied Volatility Surface", "Volatility Smile")
+                )
+
+                # Perform the selected analysis
+                if analysis_choice == "Implied Volatility Surface":
+                    plot_iv_surface(options_data)
+                    interpret_iv_surface(options_data)
+
+                elif analysis_choice == "Volatility Smile":
+                    plot_volatility_smile(options_data)
+            else:
+                st.write("No data available for the entered ticker and expiration.")
+    else:
+        st.write("No expiration dates available for the entered ticker.")
