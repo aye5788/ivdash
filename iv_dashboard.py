@@ -4,7 +4,7 @@ import requests
 import plotly.graph_objects as go
 
 # Tradier API credentials
-API_TOKEN = "7uMZjb2elQAxxOdOGhrgDkqPEqSy"  # Replace with your Tradier API token
+API_TOKEN = "7uMZjb2elQAxxOdOGhrgDkqPEqSy"  # Replace with your API token
 BASE_URL = "https://api.tradier.com/v1/markets"
 
 # --- Function to fetch expiration dates ---
@@ -60,7 +60,7 @@ def plot_iv_surface(options_data):
         fig = go.Figure(data=[
             go.Scatter3d(
                 x=options_data["strike"],
-                y=options_data["expiration_date"],
+                y=pd.to_datetime(options_data["expiration_date"]),
                 z=options_data["implied_volatility"],
                 mode="markers",
                 marker=dict(size=5, color=options_data["implied_volatility"], colorscale="Viridis"),
@@ -94,6 +94,12 @@ def plot_volatility_smile(options_data):
             yaxis_title="Implied Volatility",
         )
         st.plotly_chart(fig)
+        st.write("""
+        **Dynamic Insights for Volatility Smile:**
+        - The Volatility Smile reflects risk variations across strikes.
+        - Higher IV at extreme strikes indicates uncertainty in deep in/out-of-the-money options.
+        - Use the smile shape to identify pricing inefficiencies or arbitrage opportunities.
+        """)
     else:
         st.error("Required columns for volatility smile visualization are missing.")
 
@@ -127,41 +133,30 @@ def interpret_iv_surface(options_data):
     """)
 
 # --- Streamlit App ---
-st.title("Implied Volatility Surface Dashboard")
-st.write("This app visualizes implied volatility surfaces for selected tickers.")
+st.title("Options Analytics Dashboard")
+st.sidebar.title("Select Analysis")
+analysis_choice = st.sidebar.radio(
+    "Choose an analysis type:",
+    ("Implied Volatility Surface", "Volatility Smile")
+)
 
-# --- Ticker Input ---
+# --- Input for Ticker and Expiration ---
 ticker = st.text_input("Enter a Ticker Symbol:", "AAPL")
 if ticker:
-    st.write(f"Fetching options data for: {ticker}")
-    
-    # Fetch expirations
     expirations = fetch_expirations(ticker)
     if expirations:
         selected_expiration = st.selectbox("Select Expiration Date:", expirations)
-        
-        # Fetch options data for the selected expiration
         if selected_expiration:
             options_data = fetch_options_data(ticker, selected_expiration)
             if not options_data.empty:
                 st.write("Options Data Preview:")
                 st.dataframe(options_data.head(10))
-
-                # Menu for analysis options
-                st.sidebar.title("Select Analysis")
-                analysis_choice = st.sidebar.radio(
-                    "Choose an analysis type:",
-                    ("Implied Volatility Surface", "Volatility Smile")
-                )
-
-                # Perform the selected analysis
                 if analysis_choice == "Implied Volatility Surface":
                     plot_iv_surface(options_data)
                     interpret_iv_surface(options_data)
-
                 elif analysis_choice == "Volatility Smile":
                     plot_volatility_smile(options_data)
             else:
-                st.write("No data available for the entered ticker and expiration.")
+                st.write("No options data available for the selected expiration.")
     else:
         st.write("No expiration dates available for the entered ticker.")
