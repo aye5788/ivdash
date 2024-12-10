@@ -34,7 +34,7 @@ def fetch_ticker_price(symbol):
     
     if response.status_code == 200:
         try:
-            # Extract the closing or last trade price from Tradier's response
+            # Extract the latest closing price from Tradier's response
             data = response.json()
             quote = data.get("quotes", {}).get("quote", {})
             # Prefer the 'close' price if available, otherwise fallback to 'last'
@@ -172,28 +172,27 @@ if ticker:
                 if not options_data.empty:
                     st.write("Options Data Preview:")
                     
-# Separate Puts and Calls
-puts_data = options_data[options_data['type'] == 'put']
-calls_data = options_data[options_data['type'] == 'call']
+                    # Separate Puts and Calls
+                    puts_data = options_data[options_data['type'] == 'put']
+                    calls_data = options_data[options_data['type'] == 'call']
 
-# Find the closest strike to the current price (ATM strikes)
-puts_data['price_diff'] = abs(puts_data['strike'] - ticker_price)
-calls_data['price_diff'] = abs(calls_data['strike'] - ticker_price)
+                    # Find the closest strike to the current price (ATM strikes)
+                    puts_data['price_diff'] = abs(puts_data['strike'] - ticker_price)
+                    calls_data['price_diff'] = abs(calls_data['strike'] - ticker_price)
 
-# Remove NaN values before finding the minimum difference
-puts_data = puts_data.dropna(subset=['price_diff'])
-calls_data = calls_data.dropna(subset=['price_diff'])
+                    # Remove NaN values before finding the minimum difference
+                    puts_data = puts_data.dropna(subset=['price_diff'])
+                    calls_data = calls_data.dropna(subset=['price_diff'])
 
-# Get the ATM (closest strike) for puts and calls
-atm_put = puts_data.loc[puts_data['price_diff'].idxmin()] if not puts_data.empty else None
-atm_call = calls_data.loc[calls_data['price_diff'].idxmin()] if not calls_data.empty else None
+                    # Get the ATM (closest strike) for puts and calls
+                    atm_put = puts_data.loc[puts_data['price_diff'].idxmin()] if not puts_data.empty else None
+                    atm_call = calls_data.loc[calls_data['price_diff'].idxmin()] if not calls_data.empty else None
 
-# Highlight ATM in the table
-if atm_put is not None:
-    st.write(f"ATM Put: Strike ${atm_put['strike']} | Implied Volatility: {atm_put['implied_volatility']}")
-if atm_call is not None:
-    st.write(f"ATM Call: Strike ${atm_call['strike']} | Implied Volatility: {atm_call['implied_volatility']}")
-
+                    # Highlight ATM in the table
+                    if atm_put is not None:
+                        st.write(f"ATM Put: Strike ${atm_put['strike']} | Implied Volatility: {atm_put['implied_volatility']}")
+                    if atm_call is not None:
+                        st.write(f"ATM Call: Strike ${atm_call['strike']} | Implied Volatility: {atm_call['implied_volatility']}")
 
                     # Create two columns to display the data side by side
                     col1, col2 = st.columns(2)
@@ -228,4 +227,3 @@ if atm_call is not None:
                     st.write("No options data available for the selected expiration.")
         else:
             st.write("No expiration dates available for the entered ticker.")
-
