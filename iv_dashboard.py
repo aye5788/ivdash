@@ -32,10 +32,14 @@ def fetch_ticker_price(symbol):
         try:
             # Extract the latest closing price from Tradier's response
             data = response.json()
-            latest_close = data["quotes"]["quote"]["close"]
-            return float(latest_close)
-        except KeyError:
-            st.error(f"Could not fetch the closing price for {symbol}.")
+            latest_close = data["quotes"]["quote"].get("close", None)  # Use .get to avoid KeyError
+            if latest_close is not None:
+                return float(latest_close)
+            else:
+                st.error(f"Closing price not available for {symbol}.")
+                return None
+        except KeyError as e:
+            st.error(f"Error fetching price for {symbol}: {str(e)}")
             return None
     else:
         st.error(f"Error fetching price for {symbol}: {response.text}")
