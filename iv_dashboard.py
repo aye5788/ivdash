@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import requests
-import plotly.graph_objects as go
 
 # Tradier API credentials
 API_TOKEN = "7uMZjb2elQAxxOdOGhrgDkqPEqSy"  # Replace with your API token
@@ -20,6 +19,27 @@ def fetch_expirations(symbol):
     else:
         st.error(f"Error fetching expiration dates: {response.text}")
         return []
+
+# --- Function to fetch current ticker price ---
+def fetch_ticker_price(symbol):
+    # Replace this with your own API for fetching live ticker price (example with Alpha Vantage)
+    url = f"https://www.alphavantage.co/query"
+    params = {
+        "function": "TIME_SERIES_INTRADAY",
+        "symbol": symbol,
+        "interval": "1min",  # 1-minute intervals for live price
+        "apikey": "YOUR_ALPHA_VANTAGE_API_KEY"  # Replace with your Alpha Vantage API key
+    }
+    response = requests.get(url, params=params)
+    data = response.json()
+
+    try:
+        # Get the most recent closing price
+        latest_close = data["Time Series (1min)"].popitem()[1]["4. close"]
+        return float(latest_close)
+    except KeyError:
+        st.error(f"Could not fetch the live price for {symbol}.")
+        return None
 
 # --- Function to fetch options data ---
 def fetch_options_data(symbol, expiration):
@@ -64,31 +84,6 @@ def fetch_options_data(symbol, expiration):
         st.error(f"Error fetching options data: {response.text}")
         return pd.DataFrame()
 
-# --- Plot Volatility Smile ---
-def plot_volatility_smile(options_data):
-    if "strike" in options_data.columns and "implied_volatility" in options_data.columns:
-        smile_data = options_data.groupby("strike")["implied_volatility"].mean().dropna()
-        fig = go.Figure(data=go.Scatter(
-            x=smile_data.index,
-            y=smile_data.values,
-            mode="lines+markers",
-            marker=dict(size=8),
-        ))
-        fig.update_layout(
-            title="Volatility Smile",
-            xaxis_title="Strike Price",
-            yaxis_title="Implied Volatility",
-        )
-        st.plotly_chart(fig)
-        st.write("""
-        **Dynamic Insights for Volatility Smile:**
-        - The Volatility Smile reflects risk variations across strikes.
-        - Higher IV at extreme strikes indicates uncertainty in deep in/out-of-the-money options.
-        - Use the smile shape to identify pricing inefficiencies or arbitrage opportunities.
-        """)
-    else:
-        st.error("Required columns for volatility smile visualization are missing.")
-
 # --- Streamlit App ---
 st.title("Options Analytics Dashboard")
 st.sidebar.title("Select Analysis")
@@ -100,50 +95,68 @@ analysis_choice = st.sidebar.radio(
 # --- Input for Ticker and Expiration ---
 ticker = st.text_input("Enter a Ticker Symbol:", "AAPL")
 if ticker:
-    expirations = fetch_expirations(ticker)  # Fetch expiration dates here
-    if expirations:
-        selected_expiration = st.selectbox("Select Expiration Date:", expirations)
-        if selected_expiration:
-            options_data = fetch_options_data(ticker, selected_expiration)
-            
-            # Ensure that we have data in options_data
-            if not options_data.empty:
-                st.write("Options Data Preview:")
-                st.write(options_data.head())  # Display first few rows for debugging
+    # Fetch live ticker price
+    ticker_price = fetch_ticker_price(ticker)
+    
+    if ticker_price:
+        st.write(f"Current Price of {ticker}: ${ticker_price:.2f}")
+        
+        expirations = fetch_expirations(ticker)  # Fetch expiration dates here
+        if expirations:
+            selected_expiration = st.selectbox("Select Expiration Date:", expirations)
+            if selected_expiration:
+                options_data = fetch_options_data(ticker, selected_expiration)
                 
-                # Check if 'type' column exists and contains 'put' and 'call' values
-                if 'type' in options_data.columns:
-                    # Convert 'type' to lowercase for consistency
-                    options_data['type'] = options_data['type'].str.lower()
-
+                # Ensure that we have data in options_data
+                if not options_data.empty:
+                    st.write("Options Data Preview:")
+                    
                     # Separate Puts and Calls
                     puts_data = options_data[options_data['type'] == 'put']
                     calls_data = options_data[options_data['type'] == 'call']
 
-                    # Check if the filtered DataFrames are not empty
-                    if not puts_data.empty and not calls_data.empty:
-                        # Create two columns to display the data side by side
-                        col1, col2 = st.columns(2)
+                    # Find the closest strike to the current price (ATM strikes)
+                    puts_data['price_diff'] = abs(puts_data['strike'] - ticker_price)
+                    calls_data['price_diff'] = abs(calls_data['strike'] - ticker_price)
 
-                        with col1:
-                            st.subheader("Puts")
-                            st.dataframe(puts_data.reset_index(drop=True).head(10))  # Display Puts on the left
+                    atm_put = puts_data.loc[puts_data['price_diff'].idxmin()]
+                    atm_call = calls_data.loc[calls_data['price_diff'].idxmin()]
 
-                        with col2:
-                            st.subheader("Calls")
-                            st.dataframe(calls_data.reset_index(drop=True).head(10))  # Display Calls on the right
-                    else:
-                        st.write("No data found for Puts or Calls for the selected expiration.")
+                    # Highlight ATM in the table
+                    st.write(f"ATM Put: Strike ${atm_put['strike']} | Implied Volatility: {atm_put['implied_volatility']}")
+                    st.write(f"ATM Call: Strike ${atm_call['strike']} | Implied Volatility: {atm_call['implied_volatility']}")
+
+                    # Create two columns to display the data side by side
+                    col1, col2 = st.columns(2)
+
+                    with col1:
+                        st.subheader("Puts")
+                        st.dataframe(puts_data.reset_index(drop=True).style.format({
+                            'implied_volatility': '{:.2f}',
+                            'strike': '{:.2f}',
+                            'delta': '{:.2f}',
+                            'gamma': '{:.2f}',
+                            'theta': '{:.2f}'
+                        }))  # Display Puts on the left
+
+                    with col2:
+                        st.subheader("Calls")
+                        st.dataframe(calls_data.reset_index(drop=True).style.format({
+                            'implied_volatility': '{:.2f}',
+                            'strike': '{:.2f}',
+                            'delta': '{:.2f}',
+                            'gamma': '{:.2f}',
+                            'theta': '{:.2f}'
+                        }))  # Display Calls on the right
+
+                    # Perform the analysis based on user selection
+                    if analysis_choice == "Implied Volatility Surface":
+                        plot_iv_surface(options_data)
+                        interpret_iv_surface(options_data)
+                    elif analysis_choice == "Volatility Smile":
+                        plot_volatility_smile(options_data)
                 else:
-                    st.error("The 'type' column is missing or malformed in the options data.")
-                
-                # Perform the analysis based on user selection
-                if analysis_choice == "Implied Volatility Surface":
-                    plot_iv_surface(options_data)
-                    interpret_iv_surface(options_data)
-                elif analysis_choice == "Volatility Smile":
-                    plot_volatility_smile(options_data)
-            else:
-                st.write("No options data available for the selected expiration.")
-    else:
-        st.write("No expiration dates available for the entered ticker.")
+                    st.write("No options data available for the selected expiration.")
+        else:
+            st.write("No expiration dates available for the entered ticker.")
+
