@@ -95,6 +95,24 @@ def fetch_options_data(symbol, expiration):
         st.error(f"Error fetching options data: {response.text}")
         return pd.DataFrame()
 
+# --- Interpret IV Surface ---
+def interpret_iv_surface(options_data):
+    if "strike" in options_data.columns and "implied_volatility" in options_data.columns:
+        avg_iv_by_strike = options_data.groupby("strike")["implied_volatility"].mean()
+
+        if avg_iv_by_strike.empty:
+            st.write("No volatility data to interpret.")
+            return
+
+        # Determine if the volatility is trending up or down
+        trend_direction = "upward" if avg_iv_by_strike.diff().mean() > 0 else "downward"
+
+        st.write(f"**Implied Volatility Surface Insights:**")
+        st.write(f"Volatility is trending **{trend_direction}** across strike prices.")
+        st.write(f"Implied Volatility analysis helps to identify which strikes are overpriced or underpriced.")
+    else:
+        st.error("Required columns for IV surface interpretation are missing.")
+
 # --- Plot Implied Volatility Surface ---
 def plot_iv_surface(options_data):
     if "strike" in options_data.columns and "implied_volatility" in options_data.columns:
