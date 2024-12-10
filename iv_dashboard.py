@@ -20,26 +20,26 @@ def fetch_expirations(symbol):
         st.error(f"Error fetching expiration dates: {response.text}")
         return []
 
-# --- Function to fetch current ticker price ---
+# --- Function to fetch previous day's closing price ---
 def fetch_ticker_price(symbol):
-    # Replace this with your own API for fetching live ticker price (example with Alpha Vantage)
     url = f"https://www.alphavantage.co/query"
     params = {
-        "function": "TIME_SERIES_INTRADAY",
+        "function": "TIME_SERIES_DAILY",
         "symbol": symbol,
-        "interval": "1min",  # 1-minute intervals for live price
-        "apikey": "YOUR_ALPHA_VANTAGE_API_KEY"  # Replace with your Alpha Vantage API key
+        "apikey": "YOUR_ALPHA_VANTAGE_API_KEY"  # Replace with your API key
     }
     response = requests.get(url, params=params)
     data = response.json()
 
     try:
-        # Get the most recent closing price
-        latest_close = data["Time Series (1min)"].popitem()[1]["4. close"]
+        # Get the most recent day's closing price
+        latest_day = list(data["Time Series (Daily)"].keys())[0]
+        latest_close = data["Time Series (Daily)"][latest_day]["4. close"]
         return float(latest_close)
     except KeyError:
         st.error(f"Could not fetch the live price for {symbol}.")
         return None
+
 
 # --- Function to fetch options data ---
 def fetch_options_data(symbol, expiration):
