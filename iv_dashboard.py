@@ -52,7 +52,10 @@ def fetch_options_data(symbol, expiration):
             df["ticker"] = symbol
 
             # Remove the 'symbol' column (since it's redundant)
-            df = df.drop(columns=["symbol"])
+            df = df.drop(columns=["symbol", "greeks", "exch", "type", "change", "volume", "open", "high", "low", "close", "bid", "ask", "underlying"])
+
+            # Only keep the relevant columns for preview
+            df = df[['ticker', 'description', 'strike', 'implied_volatility', 'expiration_date']]
 
         return df
     else:
