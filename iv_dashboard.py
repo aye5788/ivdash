@@ -6,6 +6,20 @@ import requests
 API_TOKEN = "7uMZjb2elQAxxOdOGhrgDkqPEqSy"  # Replace with your API token
 BASE_URL = "https://api.tradier.com/v1/markets"
 
+# --- Function to fetch expiration dates ---
+def fetch_expirations(symbol):
+    url = f"{BASE_URL}/options/expirations"
+    headers = {"Authorization": f"Bearer {API_TOKEN}", "Accept": "application/json"}
+    params = {"symbol": symbol}
+    response = requests.get(url, headers=headers, params=params)
+
+    if response.status_code == 200:
+        expirations = response.json().get("expirations", {}).get("date", [])
+        return expirations if isinstance(expirations, list) and expirations else []
+    else:
+        st.error(f"Error fetching expiration dates: {response.text}")
+        return []
+
 # --- Function to fetch options data ---
 def fetch_options_data(symbol, expiration):
     url = f"{BASE_URL}/options/chains"
@@ -60,7 +74,7 @@ analysis_choice = st.sidebar.radio(
 # --- Input for Ticker and Expiration ---
 ticker = st.text_input("Enter a Ticker Symbol:", "AAPL")
 if ticker:
-    expirations = fetch_expirations(ticker)
+    expirations = fetch_expirations(ticker)  # Fetch expiration dates here
     if expirations:
         selected_expiration = st.selectbox("Select Expiration Date:", expirations)
         if selected_expiration:
