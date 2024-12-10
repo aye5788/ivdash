@@ -105,24 +105,39 @@ if ticker:
         selected_expiration = st.selectbox("Select Expiration Date:", expirations)
         if selected_expiration:
             options_data = fetch_options_data(ticker, selected_expiration)
+            
+            # Ensure that we have data in options_data
             if not options_data.empty:
                 st.write("Options Data Preview:")
+                st.write(options_data.head())  # Display first few rows for debugging
+                
+                # Check if 'type' column exists and contains 'put' and 'call' values
+                if 'type' in options_data.columns:
+                    # Convert 'type' to lowercase for consistency
+                    options_data['type'] = options_data['type'].str.lower()
 
-                # Separate Puts and Calls
-                puts_data = options_data[options_data['type'] == 'put']
-                calls_data = options_data[options_data['type'] == 'call']
+                    # Separate Puts and Calls
+                    puts_data = options_data[options_data['type'] == 'put']
+                    calls_data = options_data[options_data['type'] == 'call']
 
-                # Create two columns to display the data side by side
-                col1, col2 = st.columns(2)
+                    # Check if the filtered DataFrames are not empty
+                    if not puts_data.empty and not calls_data.empty:
+                        # Create two columns to display the data side by side
+                        col1, col2 = st.columns(2)
 
-                with col1:
-                    st.subheader("Puts")
-                    st.dataframe(puts_data.reset_index(drop=True).head(10))  # Display Puts on the left
+                        with col1:
+                            st.subheader("Puts")
+                            st.dataframe(puts_data.reset_index(drop=True).head(10))  # Display Puts on the left
 
-                with col2:
-                    st.subheader("Calls")
-                    st.dataframe(calls_data.reset_index(drop=True).head(10))  # Display Calls on the right
-
+                        with col2:
+                            st.subheader("Calls")
+                            st.dataframe(calls_data.reset_index(drop=True).head(10))  # Display Calls on the right
+                    else:
+                        st.write("No data found for Puts or Calls for the selected expiration.")
+                else:
+                    st.error("The 'type' column is missing or malformed in the options data.")
+                
+                # Perform the analysis based on user selection
                 if analysis_choice == "Implied Volatility Surface":
                     plot_iv_surface(options_data)
                     interpret_iv_surface(options_data)
