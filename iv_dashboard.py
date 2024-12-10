@@ -28,15 +28,22 @@ def fetch_ticker_price(symbol):
     params = {"symbols": symbol}
     
     response = requests.get(url, headers=headers, params=params)
+    
+    # Log the response to debug the issue
+    st.write(f"Response from Tradier API for {symbol}: {response.json()}")  # Debugging line
+    
     if response.status_code == 200:
         try:
-            # Extract the latest closing price from Tradier's response
+            # Extract the closing or last trade price from Tradier's response
             data = response.json()
-            latest_close = data["quotes"]["quote"].get("close", None)  # Use .get to avoid KeyError
+            quote = data.get("quotes", {}).get("quote", {})
+            # Prefer the 'close' price if available, otherwise fallback to 'last'
+            latest_close = quote.get("close") or quote.get("last")  # Using 'last' price as a fallback
+            
             if latest_close is not None:
                 return float(latest_close)
             else:
-                st.error(f"Closing price not available for {symbol}.")
+                st.error(f"Closing price (or last trade price) not available for {symbol}.")
                 return None
         except KeyError as e:
             st.error(f"Error fetching price for {symbol}: {str(e)}")
