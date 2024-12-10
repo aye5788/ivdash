@@ -159,7 +159,8 @@ if ticker:
             options_data = fetch_options_data(ticker, selected_expiration)
             if not options_data.empty:
                 st.write("Options Data Preview:")
-                st.dataframe(options_data.head(10))  # Display preview with ticker column only
+                # Reset the index to remove the default index column
+                st.dataframe(options_data.reset_index(drop=True).head(10))  # Display preview with ticker column only
                 if analysis_choice == "Implied Volatility Surface":
                     plot_iv_surface(options_data)
                     interpret_iv_surface(options_data)
@@ -169,3 +170,4 @@ if ticker:
                 st.write("No options data available for the selected expiration.")
     else:
         st.write("No expiration dates available for the entered ticker.")
+
