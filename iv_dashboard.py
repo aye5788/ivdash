@@ -48,6 +48,12 @@ def fetch_options_data(symbol, expiration):
             df["strike"] = df["strike"]
             df["expiration_date"] = expiration
 
+            # Add a new column with only the root symbol (ticker)
+            df["ticker"] = symbol
+
+            # Remove the 'symbol' column (since it's redundant)
+            df = df.drop(columns=["symbol"])
+
         return df
     else:
         st.error(f"Error fetching options data: {response.text}")
@@ -150,7 +156,7 @@ if ticker:
             options_data = fetch_options_data(ticker, selected_expiration)
             if not options_data.empty:
                 st.write("Options Data Preview:")
-                st.dataframe(options_data.head(10))
+                st.dataframe(options_data.head(10))  # Display preview with ticker column only
                 if analysis_choice == "Implied Volatility Surface":
                     plot_iv_surface(options_data)
                     interpret_iv_surface(options_data)
