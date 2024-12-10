@@ -21,24 +21,24 @@ def fetch_expirations(symbol):
         st.error(f"Error fetching expiration dates: {response.text}")
         return []
 
-# --- Function to fetch previous day's closing price ---
+# --- Function to fetch previous day's closing price using Tradier ---
 def fetch_ticker_price(symbol):
-    url = f"https://www.alphavantage.co/query"
-    params = {
-        "function": "TIME_SERIES_DAILY",
-        "symbol": symbol,
-        "apikey": "YOUR_ALPHA_VANTAGE_API_KEY"  # Replace with your API key
-    }
-    response = requests.get(url, params=params)
-    data = response.json()
-
-    try:
-        # Get the most recent day's closing price
-        latest_day = list(data["Time Series (Daily)"].keys())[0]
-        latest_close = data["Time Series (Daily)"][latest_day]["4. close"]
-        return float(latest_close)
-    except KeyError:
-        st.error(f"Could not fetch the live price for {symbol}.")
+    url = f"https://api.tradier.com/v1/markets/quotes"
+    headers = {"Authorization": f"Bearer {API_TOKEN}", "Accept": "application/json"}
+    params = {"symbols": symbol}
+    
+    response = requests.get(url, headers=headers, params=params)
+    if response.status_code == 200:
+        try:
+            # Extract the latest closing price from Tradier's response
+            data = response.json()
+            latest_close = data["quotes"]["quote"]["close"]
+            return float(latest_close)
+        except KeyError:
+            st.error(f"Could not fetch the closing price for {symbol}.")
+            return None
+    else:
+        st.error(f"Error fetching price for {symbol}: {response.text}")
         return None
 
 # --- Function to fetch options data ---
