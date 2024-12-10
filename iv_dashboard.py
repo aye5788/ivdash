@@ -1,6 +1,7 @@
 import streamlit as st
 import pandas as pd
 import requests
+import plotly.graph_objects as go
 
 # Tradier API credentials
 API_TOKEN = "7uMZjb2elQAxxOdOGhrgDkqPEqSy"  # Replace with your API token
@@ -62,6 +63,31 @@ def fetch_options_data(symbol, expiration):
     else:
         st.error(f"Error fetching options data: {response.text}")
         return pd.DataFrame()
+
+# --- Plot Volatility Smile ---
+def plot_volatility_smile(options_data):
+    if "strike" in options_data.columns and "implied_volatility" in options_data.columns:
+        smile_data = options_data.groupby("strike")["implied_volatility"].mean().dropna()
+        fig = go.Figure(data=go.Scatter(
+            x=smile_data.index,
+            y=smile_data.values,
+            mode="lines+markers",
+            marker=dict(size=8),
+        ))
+        fig.update_layout(
+            title="Volatility Smile",
+            xaxis_title="Strike Price",
+            yaxis_title="Implied Volatility",
+        )
+        st.plotly_chart(fig)
+        st.write("""
+        **Dynamic Insights for Volatility Smile:**
+        - The Volatility Smile reflects risk variations across strikes.
+        - Higher IV at extreme strikes indicates uncertainty in deep in/out-of-the-money options.
+        - Use the smile shape to identify pricing inefficiencies or arbitrage opportunities.
+        """)
+    else:
+        st.error("Required columns for volatility smile visualization are missing.")
 
 # --- Streamlit App ---
 st.title("Options Analytics Dashboard")
