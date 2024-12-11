@@ -21,7 +21,7 @@ def fetch_expirations(symbol):
         st.error(f"Error fetching expiration dates: {response.text}")
         return []
 
-# --- Function to fetch previous day's closing price using Tradier ---
+# --- Function to fetch previous day's closing price ---
 def fetch_ticker_price(symbol):
     url = f"https://api.tradier.com/v1/markets/quotes"
     headers = {"Authorization": f"Bearer {API_TOKEN}", "Accept": "application/json"}
@@ -29,21 +29,16 @@ def fetch_ticker_price(symbol):
     
     response = requests.get(url, headers=headers, params=params)
     
-    # Log the response to debug the issue
-    st.write(f"Response from Tradier API for {symbol}: {response.json()}")  # Debugging line
-    
     if response.status_code == 200:
         try:
-            # Extract the latest closing price from Tradier's response
             data = response.json()
             quote = data.get("quotes", {}).get("quote", {})
-            # Prefer the 'close' price if available, otherwise fallback to 'last'
-            latest_close = quote.get("close") or quote.get("last")  # Using 'last' price as a fallback
+            latest_close = quote.get("close") or quote.get("last")
             
             if latest_close is not None:
                 return float(latest_close)
             else:
-                st.error(f"Closing price (or last trade price) not available for {symbol}.")
+                st.error(f"Closing price not available for {symbol}.")
                 return None
         except KeyError as e:
             st.error(f"Error fetching price for {symbol}: {str(e)}")
@@ -94,24 +89,6 @@ def fetch_options_data(symbol, expiration):
     else:
         st.error(f"Error fetching options data: {response.text}")
         return pd.DataFrame()
-
-# --- Interpret IV Surface ---
-def interpret_iv_surface(options_data):
-    if "strike" in options_data.columns and "implied_volatility" in options_data.columns:
-        avg_iv_by_strike = options_data.groupby("strike")["implied_volatility"].mean()
-
-        if avg_iv_by_strike.empty:
-            st.write("No volatility data to interpret.")
-            return
-
-        # Determine if the volatility is trending up or down
-        trend_direction = "upward" if avg_iv_by_strike.diff().mean() > 0 else "downward"
-
-        st.write(f"**Implied Volatility Surface Insights:**")
-        st.write(f"Volatility is trending **{trend_direction}** across strike prices.")
-        st.write(f"Implied Volatility analysis helps to identify which strikes are overpriced or underpriced.")
-    else:
-        st.error("Required columns for IV surface interpretation are missing.")
 
 # --- Plot Implied Volatility Surface ---
 def plot_iv_surface(options_data):
@@ -188,59 +165,20 @@ if ticker:
                 
                 # Ensure that we have data in options_data
                 if not options_data.empty:
-                    st.write("Options Data Preview:")
-                    
-                    # Separate Puts and Calls
-                    puts_data = options_data[options_data['type'] == 'put']
-                    calls_data = options_data[options_data['type'] == 'call']
-
-                    # Find the closest strike to the current price (ATM strikes)
-                    puts_data['price_diff'] = abs(puts_data['strike'] - ticker_price)
-                    calls_data['price_diff'] = abs(calls_data['strike'] - ticker_price)
-
-                    # Remove NaN values before finding the minimum difference
-                    puts_data = puts_data.dropna(subset=['price_diff'])
-                    calls_data = calls_data.dropna(subset=['price_diff'])
-
-                    # Get the ATM (closest strike) for puts and calls
-                    atm_put = puts_data.loc[puts_data['price_diff'].idxmin()] if not puts_data.empty else None
-                    atm_call = calls_data.loc[calls_data['price_diff'].idxmin()] if not calls_data.empty else None
-
-                    # Highlight ATM in the table
-                    if atm_put is not None:
-                        st.write(f"ATM Put: Strike ${atm_put['strike']} | Implied Volatility: {atm_put['implied_volatility']}")
-                    if atm_call is not None:
-                        st.write(f"ATM Call: Strike ${atm_call['strike']} | Implied Volatility: {atm_call['implied_volatility']}")
-
                     # Create two columns to display the data side by side
                     col1, col2 = st.columns(2)
 
                     with col1:
-                        st.subheader("Puts")
-                        st.dataframe(puts_data.reset_index(drop=True).style.format({
-                            'implied_volatility': '{:.2f}',
-                            'strike': '{:.2f}',
-                            'delta': '{:.2f}',
-                            'gamma': '{:.2f}',
-                            'theta': '{:.2f}'
-                        }))  # Display Puts on the left
+                        st.subheader("Puts and Calls Data Removed (Analysis Only)")
+                        # No tables, only the analysis now.
 
                     with col2:
-                        st.subheader("Calls")
-                        st.dataframe(calls_data.reset_index(drop=True).style.format({
-                            'implied_volatility': '{:.2f}',
-                            'strike': '{:.2f}',
-                            'delta': '{:.2f}',
-                            'gamma': '{:.2f}',
-                            'theta': '{:.2f}'
-                        }))  # Display Calls on the right
-
-                    # Perform the analysis based on user selection
-                    if analysis_choice == "Implied Volatility Surface":
-                        plot_iv_surface(options_data)
-                        interpret_iv_surface(options_data)
-                    elif analysis_choice == "Volatility Smile":
-                        plot_volatility_smile(options_data)
+                        st.subheader("Analysis Results")
+                        # Perform the analysis based on user selection
+                        if analysis_choice == "Implied Volatility Surface":
+                            plot_iv_surface(options_data)
+                        elif analysis_choice == "Volatility Smile":
+                            plot_volatility_smile(options_data)
                 else:
                     st.write("No options data available for the selected expiration.")
         else:
